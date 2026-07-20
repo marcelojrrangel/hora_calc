@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualizar CSV</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <nav class="nav">
+      <a href="/" class="nav-link">Registro</a>
+      <a href="/calculadora" class="nav-link">Calculadora</a>
+      <a href="/csv-viewer" class="nav-link active">CSV</a>
+    </nav>
+
+    <h1>Arquivos CSV</h1>
+    <p class="subtitle">Visualize os arquivos de horas já gerados</p>
+
+    <div class="csv-select-card">
+      <div class="csv-select-header">
+        <h2>Selecionar arquivo</h2>
+        <span id="file-count" class="file-count"></span>
+      </div>
+      <div class="form-group">
+        <select id="file-select" class="file-select">
+          <option value="">Carregando arquivos...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card" id="csv-content-card" style="display:none">
+      <div class="csv-file-header">
+        <h2 id="csv-filename"></h2>
+        <div class="csv-badge" id="csv-badge"></div>
+      </div>
+      <div class="csv-stats" id="csv-stats">
+        <div class="stat-box">
+          <span class="stat-value" id="stat-count">0</span>
+          <span class="stat-label">Registros</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="stat-total">0h</span>
+          <span class="stat-label">Total Horas</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="stat-decimal">0,00</span>
+          <span class="stat-label">Decimal</span>
+        </div>
+      </div>
+      <div class="csv-search">
+        <input type="text" id="csv-search" class="csv-search-input" placeholder="Buscar na tabela...">
+      </div>
+      <div class="table-wrapper">
+        <table id="csv-table">
+          <thead id="csv-thead"></thead>
+          <tbody id="csv-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="csv-empty-card" style="display:none">
+      <div class="empty-state-icon">📂</div>
+      <p class="empty-state">Nenhum arquivo CSV encontrado na pasta <code>data/</code>.</p>
+    </div>
+  </div>
+
+  <script>
+    const fileSelect = document.getElementById('file-select');
+    const fileCount = document.getElementById('file-count');
+    const contentCard = document.getElementById('csv-content-card');
+    const emptyCard = document.getElementById('csv-empty-card');
+    const csvFilename = document.getElementById('csv-filename');
+    const csvBadge = document.getElementById('csv-badge');
+    const csvThead = document.getElementById('csv-thead');
+    const csvTbody = document.getElementById('csv-tbody');
+    const statCount = document.getElementById('stat-count');
+    const statTotal = document.getElementById('stat-total');
+    const statDecimal = document.getElementById('stat-decimal');
+    const searchInput = document.getElementById('csv-search');
+
+    let currentRows = [];
+    let currentHeader = [];
+
+    async function loadFileList() {
+      const res = await fetch('/csv-files');
+      const files = await res.json();
+      fileSelect.innerHTML = '<option value="">Selecione um arquivo...</option>';
+      if (files.length === 0) {
+        emptyCard.style.display = 'block';
+        fileCount.textContent = '0 arquivos';
+        return;
+      }
+      emptyCard.style.display = 'none';
+      fileCount.textContent = `${files.length} arquivo(s)`;
+      files.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.filename;
+        const datePart = f.filename.replace('Horas_', '').replace('.csv', '');
+        const sizeKB = (f.size / 1024).toFixed(1);
+        opt.textContent = `${datePart} (${sizeKB} KB)`;
+        fileSelect.appendChild(opt);
+      });
+    }
+
+    function renderTable(rows) {
+      csvTbody.innerHTML = '';
+      rows.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        currentHeader.forEach(h => {
+          const td = document.createElement('td');
+          const val = row[h] || '';
+          td.textContent = val;
+          if (h === 'Duração') td.className = 'cell-duration';
+          if (h === 'Horas') td.className = 'cell-hours';
+          tr.appendChild(td);
+        });
+        tr.style.animationDelay = `${(i % 20) * 20}ms`;
+        csvTbody.appendChild(tr);
+      });
+    }
+
+    function updateStats(rows) {
+      statCount.textContent = rows.length;
+      let totalMin = 0;
+      rows.forEach(row => {
+        if (row.Horas) totalMin += parseFloat(row.Horas) * 60;
+      });
+      const h = Math.floor(totalMin / 60);
+      const m = Math.round(totalMin % 60);
+      let totalStr = '';
+      if (h > 0 && m > 0) totalStr = `${h}h${m}min`;
+      else if (h > 0) totalStr = `${h}h`;
+      else totalStr = `${m}min`;
+      statTotal.textContent = totalStr;
+      statDecimal.textContent = (totalMin / 60).toFixed(2).replace('.', ',');
+    }
+
+    function filterRows(query) {
+      if (!query) {
+        renderTable(currentRows);
+        updateStats(currentRows);
+        return;
+      }
+      const q = query.toLowerCase();
+      const filtered = currentRows.filter(row =>
+        currentHeader.some(h => (row[h] || '').toLowerCase().includes(q))
+      );
+      renderTable(filtered);
+      updateStats(filtered);
+    }
+
+    fileSelect.addEventListener('change', async () => {
+      const filename = fileSelect.value;
+      if (!filename) {
+        contentCard.style.display = 'none';
+        return;
+      }
+      const res = await fetch(`/csv-files/${encodeURIComponent(filename)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      csvFilename.textContent = filename;
+
+      const dateLabel = filename.replace('Horas_', '').replace('.csv', '');
+      csvBadge.textContent = dateLabel;
+
+      currentHeader = data.header || [];
+      currentRows = data.rows || [];
+
+      csvThead.innerHTML = '';
+      if (currentHeader.length) {
+        const tr = document.createElement('tr');
+        currentHeader.forEach(h => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          tr.appendChild(th);
+        });
+        csvThead.appendChild(tr);
+      }
+
+      searchInput.value = '';
+      filterRows('');
+      contentCard.style.display = 'block';
+    });
+
+    searchInput.addEventListener('input', (e) => {
+      filterRows(e.target.value);
+    });
+
+    loadFileList();
+  </script>
+</body>
+</html>

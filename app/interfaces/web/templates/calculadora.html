@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora de Horas</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <nav class="nav">
+      <a href="/" class="nav-link">Registro</a>
+      <a href="/calculadora" class="nav-link active">Calculadora</a>
+      <a href="/csv-viewer" class="nav-link">CSV</a>
+    </nav>
+
+    <h1>Calculadora de Horas</h1>
+    <p class="subtitle">Ferramentas para calcular, dividir e converter horas</p>
+
+    <div class="calc-modes">
+      <button class="calc-mode-btn active" data-mode="intervalo">Intervalo</button>
+      <button class="calc-mode-btn" data-mode="dividir">Dividir</button>
+      <button class="calc-mode-btn" data-mode="somar">Somar</button>
+      <button class="calc-mode-btn" data-mode="distribuir">Distribuir</button>
+      <button class="calc-mode-btn" data-mode="converter">Converter</button>
+    </div>
+
+    <div class="card calc-panel" id="panel-intervalo">
+      <h2>Intervalo entre horários</h2>
+      <p class="panel-desc">Calcula a duração entre dois horários</p>
+      <form id="form-intervalo">
+        <div class="form-group">
+          <label for="int-inicio">Início</label>
+          <input type="time" id="int-inicio" required>
+        </div>
+        <div class="form-group">
+          <label for="int-fim">Fim</label>
+          <input type="time" id="int-fim" required>
+        </div>
+        <button type="submit" class="btn">Calcular</button>
+      </form>
+    </div>
+
+    <div class="card calc-panel" id="panel-dividir" style="display:none">
+      <h2>Dividir horas entre cards</h2>
+      <p class="panel-desc">Divide um total de horas igualmente entre N cards ou tarefas</p>
+      <form id="form-dividir">
+        <div class="form-group">
+          <label for="div-total">Total de horas (HH:MM)</label>
+          <div class="input-with-btn">
+            <input type="time" id="div-total" required>
+            <button type="button" class="btn btn-sm btn-outline" id="fill-div-total" title="Usar saldo restante de hoje">Saldo</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="div-partes">Número de cards / partes</label>
+          <input type="number" id="div-partes" min="1" max="100" value="2" required>
+        </div>
+        <button type="submit" class="btn">Dividir</button>
+      </form>
+    </div>
+
+    <div class="card calc-panel" id="panel-somar" style="display:none">
+      <h2>Somar durações</h2>
+      <p class="panel-desc">Soma múltiplos períodos de tempo</p>
+      <form id="form-somar">
+        <div id="somar-inputs">
+          <div class="form-group somar-row">
+            <label>Duração 1</label>
+            <input type="time" class="somar-time" required>
+          </div>
+          <div class="form-group somar-row">
+            <label>Duração 2</label>
+            <input type="time" class="somar-time" required>
+          </div>
+        </div>
+        <div class="somar-actions">
+          <button type="button" class="btn btn-sm btn-outline" id="add-duracao">+ Adicionar</button>
+          <button type="button" class="btn btn-sm btn-outline" id="remove-duracao">- Remover</button>
+        </div>
+        <button type="submit" class="btn" style="margin-top:0.75rem">Somar</button>
+      </form>
+    </div>
+
+    <div class="card calc-panel" id="panel-distribuir" style="display:none">
+      <h2>Distribuir horas por porcentagem</h2>
+      <p class="panel-desc">Distribui um total de horas entre cards com porcentagens personalizadas</p>
+      <form id="form-distribuir">
+        <div class="form-group">
+          <label for="dist-total">Total de horas (HH:MM)</label>
+          <div class="input-with-btn">
+            <input type="time" id="dist-total" required>
+            <button type="button" class="btn btn-sm btn-outline" id="fill-dist-total" title="Usar saldo restante de hoje">Saldo</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="dist-cards">Número de cards</label>
+          <input type="number" id="dist-cards" min="1" max="20" value="2" required>
+        </div>
+        <div id="dist-percentagens"></div>
+        <div class="dist-total-bar">
+          <span>Total distribuído:</span>
+          <span id="dist-soma-pct">0%</span>
+        </div>
+        <button type="submit" class="btn" style="margin-top:0.75rem">Distribuir</button>
+      </form>
+    </div>
+
+    <div class="card calc-panel" id="panel-converter" style="display:none">
+      <h2>Converter formato de horas</h2>
+      <p class="panel-desc">Converte entre HH:MM e horas decimais</p>
+      <form id="form-converter">
+        <div class="converter-options">
+          <label class="converter-option">
+            <input type="radio" name="conv-direction" value="to-decimal" checked>
+            <span>HH:MM → Decimal</span>
+          </label>
+          <label class="converter-option">
+            <input type="radio" name="conv-direction" value="to-hms">
+            <span>Decimal → HH:MM</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="conv-valor">Valor</label>
+          <input type="text" id="conv-valor" required placeholder="Ex: 2:30 ou 2.5">
+        </div>
+        <button type="submit" class="btn">Converter</button>
+      </form>
+    </div>
+
+    <div class="card" id="result-card" style="display:none">
+      <h2>Resultado</h2>
+      <div class="result-display" id="result-display"></div>
+      <div id="result-detail" class="result-detail"></div>
+    </div>
+  </div>
+
+  <script>
+    function parseTime(val) {
+      const parts = val.split(':');
+      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    }
+
+    function formatMinutos(m) {
+      const abs = Math.abs(m);
+      const h = Math.floor(abs / 60);
+      const min = abs % 60;
+      if (h > 0 && min > 0) return `${h}h${min}min`;
+      if (h > 0) return `${h}h`;
+      return `${min}min`;
+    }
+
+    function formatDecimal(dec) {
+      const h = Math.floor(dec);
+      const min = Math.round((dec - h) * 60);
+      if (h > 0 && min > 0) return `${h}h${min}min`;
+      if (h > 0) return `${h}h`;
+      return `${min}min`;
+    }
+
+    const modeBtns = document.querySelectorAll('.calc-mode-btn');
+    const panels = {
+      intervalo: document.getElementById('panel-intervalo'),
+      dividir: document.getElementById('panel-dividir'),
+      somar: document.getElementById('panel-somar'),
+      distribuir: document.getElementById('panel-distribuir'),
+      converter: document.getElementById('panel-converter'),
+    };
+    const resultCard = document.getElementById('result-card');
+    const resultDisplay = document.getElementById('result-display');
+    const resultDetail = document.getElementById('result-detail');
+
+    let currentMode = 'intervalo';
+
+    modeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        modeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        Object.values(panels).forEach(p => { if (p) p.style.display = 'none'; });
+        if (panels[currentMode]) panels[currentMode].style.display = 'block';
+        resultCard.style.display = 'none';
+      });
+    });
+
+    function showResult(text, detail = '') {
+      resultDisplay.textContent = text;
+      resultDetail.textContent = detail;
+      resultDetail.style.display = detail ? 'block' : 'none';
+      resultCard.style.display = 'block';
+    }
+
+    // Intervalo
+    document.getElementById('form-intervalo').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const inicio = document.getElementById('int-inicio').value;
+      const fim = document.getElementById('int-fim').value;
+      if (!inicio || !fim) return;
+
+      const diff = parseTime(fim) - parseTime(inicio);
+      const absDiff = Math.abs(diff);
+      const h = Math.floor(absDiff / 60);
+      const m = absDiff % 60;
+
+      let result = '';
+      if (h > 0 && m > 0) result = `${h}h${m}min`;
+      else if (h > 0) result = `${h}h`;
+      else result = `${m}min`;
+      if (diff < 0) result = `-${result}`;
+
+      const dec = (absDiff / 60).toFixed(2);
+      showResult(result, `Equivalente a ${dec} horas decimais`);
+    });
+
+    // Dividir
+    async function fillRemaining(targetId) {
+      try {
+        const res = await fetch('/resumo/restante');
+        const data = await res.json();
+        const h = Math.floor(data.remaining_minutes / 60);
+        const m = data.remaining_minutes % 60;
+        const val = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        document.getElementById(targetId).value = val;
+        showResult(
+          `Saldo: ${data.remaining_hours} restantes`,
+          `Carregado do dia de hoje (${data.remaining_decimal.toFixed(2).replace('.',',')}h)`
+        );
+      } catch {
+        showResult('Erro', 'Não foi possível carregar o saldo');
+      }
+    }
+
+    document.getElementById('fill-div-total').addEventListener('click', () => fillRemaining('div-total'));
+    document.getElementById('fill-dist-total').addEventListener('click', () => fillRemaining('dist-total'));
+
+    document.getElementById('form-dividir').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const total = document.getElementById('div-total').value;
+      const partes = parseInt(document.getElementById('div-partes').value);
+      if (!total || !partes || partes < 1) return;
+
+      const totalMin = parseTime(total);
+      const parteMin = Math.floor(totalMin / partes);
+      const resto = totalMin % partes;
+      const parteStr = formatMinutos(parteMin);
+
+      let detail = `${partes} × ${parteStr}`;
+      if (resto > 0) {
+        detail += ` + ${formatMinutos(resto)} de resto`;
+      }
+      detail += ` = ${formatMinutos(totalMin)}`;
+
+      showResult(`Cada card: ${parteStr}`, detail);
+    });
+
+    // Somar
+    document.getElementById('form-somar').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const inputs = document.querySelectorAll('.somar-time');
+      let totalMin = 0;
+      inputs.forEach(inp => {
+        if (inp.value) totalMin += parseTime(inp.value);
+      });
+      showResult(`Total: ${formatMinutos(totalMin)}`, `${inputs.length} durações somadas`);
+    });
+
+    document.getElementById('add-duracao').addEventListener('click', () => {
+      const container = document.getElementById('somar-inputs');
+      const count = container.querySelectorAll('.somar-row').length + 1;
+      const div = document.createElement('div');
+      div.className = 'form-group somar-row';
+      div.innerHTML = `<label>Duração ${count}</label><input type="time" class="somar-time" required>`;
+      container.appendChild(div);
+    });
+
+    document.getElementById('remove-duracao').addEventListener('click', () => {
+      const rows = document.querySelectorAll('#somar-inputs .somar-row');
+      if (rows.length > 2) rows[rows.length - 1].remove();
+    });
+
+    // Distribuir
+    function rebuildDistCards() {
+      const num = parseInt(document.getElementById('dist-cards').value) || 2;
+      const container = document.getElementById('dist-percentagens');
+      container.innerHTML = '';
+      const pct = Math.floor(100 / num);
+      let resto = 100 - pct * num;
+      for (let i = 0; i < num; i++) {
+        const p = i < num - 1 ? pct : pct + resto;
+        const div = document.createElement('div');
+        div.className = 'form-group dist-row';
+        div.innerHTML = `
+          <label>Card ${i + 1}</label>
+          <div class="dist-input-group">
+            <input type="number" class="dist-pct" min="0" max="100" value="${p}" data-idx="${i}">
+            <span>%</span>
+            <span class="dist-time" data-idx="${i}">--</span>
+          </div>
+        `;
+        container.appendChild(div);
+      }
+      updateDistTotal();
+    }
+
+    document.getElementById('dist-cards').addEventListener('change', rebuildDistCards);
+    document.getElementById('dist-cards').addEventListener('input', rebuildDistCards);
+
+    document.getElementById('dist-total').addEventListener('input', updateDistTotal);
+
+    document.addEventListener('input', (e) => {
+      if (e.target.classList.contains('dist-pct')) updateDistTotal();
+    });
+
+    function updateDistTotal() {
+      const pcts = document.querySelectorAll('.dist-pct');
+      let total = 0;
+      pcts.forEach(p => total += parseInt(p.value) || 0);
+      document.getElementById('dist-soma-pct').textContent = total + '%';
+
+      const totalInput = document.getElementById('dist-total').value;
+      const totalMin = totalInput ? parseTime(totalInput) : 0;
+      const timeSpans = document.querySelectorAll('.dist-time');
+      pcts.forEach((p, i) => {
+        const pctVal = parseInt(p.value) || 0;
+        const min = totalMin ? Math.round(totalMin * pctVal / 100) : 0;
+        const span = timeSpans[i];
+        if (span) span.textContent = totalMin ? formatMinutos(min) : '--';
+      });
+    }
+
+    document.getElementById('form-distribuir').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const total = document.getElementById('dist-total').value;
+      if (!total) return;
+      const totalMin = parseTime(total);
+      const pcts = document.querySelectorAll('.dist-pct');
+      let totalPct = 0;
+      pcts.forEach(p => totalPct += parseInt(p.value) || 0);
+      if (totalPct !== 100) {
+        showResult('Erro', `As porcentagens somam ${totalPct}%, mas devem somar 100%`);
+        return;
+      }
+      let lines = [];
+      pcts.forEach((p, i) => {
+        const min = Math.round(totalMin * (parseInt(p.value) / 100));
+        lines.push(`Card ${i + 1} (${p.value}%): ${formatMinutos(min)}`);
+      });
+      showResult(`Total: ${formatMinutos(totalMin)}`, lines.join(' | '));
+    });
+
+    // Converter
+    document.getElementById('form-converter').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const dir = document.querySelector('input[name="conv-direction"]:checked').value;
+      const val = document.getElementById('conv-valor').value.trim();
+      if (!val) return;
+
+      if (dir === 'to-decimal') {
+        const parts = val.split(':');
+        if (parts.length === 2) {
+          const h = parseInt(parts[0]);
+          const m = parseInt(parts[1]);
+          const dec = (h + m / 60).toFixed(2);
+          showResult(`${dec} horas`, `${val} → ${dec} horas decimais`);
+        } else {
+          showResult('Formato inválido', 'Use HH:MM (ex: 2:30)');
+        }
+      } else {
+        const dec = parseFloat(val);
+        if (isNaN(dec)) {
+          showResult('Valor inválido', 'Digite um número decimal (ex: 2.5)');
+          return;
+        }
+        const h = Math.floor(dec);
+        const m = Math.round((dec - h) * 60);
+        showResult(`${h}h${m}min`, `${dec} → ${h}h${m}min`);
+      }
+    });
+  </script>
+</body>
+</html>

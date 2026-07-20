@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somador de Horas</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <nav class="nav">
+      <a href="/" class="nav-link active">Registro</a>
+      <a href="/calculadora" class="nav-link">Calculadora</a>
+      <a href="/csv-viewer" class="nav-link">CSV</a>
+    </nav>
+    <h1>Somador de Horas</h1>
+    <p class="subtitle" id="date-display">{{ today }}</p>
+
+    <div id="alert" class="alert"></div>
+
+    <div class="card">
+      <h2 id="form-title">Registro de Horas</h2>
+      <form id="meeting-form">
+        <input type="hidden" id="edit-index" value="">
+        <div class="form-group">
+          <label for="nome">Descrição</label>
+          <input type="text" id="nome" name="nome" required placeholder="Ex: Reunião XPTO">
+        </div>
+        <div class="form-group">
+          <label for="inicio">Início</label>
+          <input type="time" id="inicio" name="inicio" required>
+        </div>
+        <div class="form-group">
+          <label for="fim">Fim</label>
+          <input type="time" id="fim" name="fim" required>
+        </div>
+        <div class="form-group">
+          <label for="card">Card (opcional)</label>
+          <input type="text" id="card" name="card" placeholder="Ex: PROJ-123">
+        </div>
+        <button type="submit" class="btn" id="submit-btn">Registrar</button>
+        <button type="button" class="btn btn-sm btn-outline" id="cancel-edit-btn" style="display:none;margin-top:0.5rem">Cancelar edição</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Reuniões de Hoje</h2>
+      <ul class="meeting-list" id="meeting-list">
+        {% if meetings %}
+          {% for m in meetings %}
+          <li class="meeting-item" data-index="{{ loop.index0 }}">
+            <div>
+              <div class="meeting-name">{{ m.name }}</div>
+              <div class="meeting-time">{{ m.start_time.strftime('%H:%M') }} — {{ m.end_time.strftime('%H:%M') }}</div>
+              {% if m.card %}
+              <span class="card-badge">{{ m.card }}</span>
+              {% endif %}
+            </div>
+            <div class="meeting-actions">
+              <span class="meeting-duration">{{ m.duration_hours }}</span>
+              <button class="btn-icon btn-edit" title="Editar" data-index="{{ loop.index0 }}">Editar</button>
+              <button class="btn-icon btn-delete" title="Excluir" data-index="{{ loop.index0 }}">Excluir</button>
+            </div>
+          </li>
+          {% endfor %}
+        {% else %}
+          <li class="empty-state">Nenhuma reunião registrada hoje</li>
+        {% endif %}
+      </ul>
+      <div class="total-row" id="total-row" {% if not meetings %}style="display:none"{% endif %}>
+        <span>Total</span>
+        <span id="total-value">{{ total }}</span>
+      </div>
+      <div class="balance-row" id="balance-row" {% if not meetings %}style="display:none"{% endif %}>
+        <span>08:00</span>
+        <span id="balance-value" class="{% if balance.is_overtime %}overtime{% endif %}">
+          {%- if balance.is_overtime -%}
+            {{ balance_text }} extra
+          {%- elif balance.balance_minutes == 0 -%}
+            Completo
+          {%- else -%}
+            Restam {{ balance_text }}
+          {%- endif -%}
+        </span>
+      </div>
+      <div class="export-row" id="export-row" {% if not meetings %}style="display:none"{% endif %}>
+        <button class="btn btn-sm btn-outline" id="export-btn">📋 Copiar relatório</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('meeting-form');
+    const formTitle = document.getElementById('form-title');
+    const editIndex = document.getElementById('edit-index');
+    const alertEl = document.getElementById('alert');
+    const meetingList = document.getElementById('meeting-list');
+    const totalRow = document.getElementById('total-row');
+    const totalValue = document.getElementById('total-value');
+    const balanceRow = document.getElementById('balance-row');
+    const balanceValue = document.getElementById('balance-value');
+    const submitBtn = document.getElementById('submit-btn');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const nomeInput = document.getElementById('nome');
+    const inicioInput = document.getElementById('inicio');
+    const fimInput = document.getElementById('fim');
+    const cardInput = document.getElementById('card');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+
+      const data = new FormData(form);
+      const editing = editIndex.value !== '';
+
+      try {
+        const url = editing ? `/reunioes/${editIndex.value}` : '/registrar';
+        const method = editing ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, body: data });
+        const result = await res.json();
+
+        if (!res.ok) {
+          showAlert(result.detail || 'Erro ao salvar', 'error');
+          return;
+        }
+
+        showAlert(`"${result.meeting}" ${editing ? 'atualizada' : 'registrada'} com sucesso!`, 'success');
+        cancelEdit();
+        await refreshMeetings();
+      } catch {
+        showAlert('Erro de conexão', 'error');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    cancelEditBtn.addEventListener('click', cancelEdit);
+
+    exportBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/reunioes');
+        const data = await res.json();
+        const meetings = data.filter(item => !item.total);
+        const totalItem = data.find(item => item.total);
+        const today = new Date().toLocaleDateString('pt-BR');
+
+        let report = `📋 Relatório de Horas — ${today}\n`;
+        report += `${'='.repeat(35)}\n\n`;
+
+        meetings.forEach((m, i) => {
+          const card = m.card ? ` [${m.card}]` : '';
+          report += `${i + 1}. ${m.name}${card}\n`;
+          report += `   ${m.start} às ${m.end} (${m.duration})\n`;
+        });
+
+        if (totalItem) {
+          report += `\n${'='.repeat(35)}\n`;
+          const bm = totalItem.balance_minutes;
+          const absBm = Math.abs(bm);
+          const h = Math.floor(absBm / 60);
+          const min = absBm % 60;
+          let bal = '';
+          if (bm < 0) bal = `${h}h${min}min extra`;
+          else if (bm === 0) bal = 'Completo (8h)';
+          else bal = `Restam ${h}h${min}min`;
+          report += `Total: ${totalItem.total}\n`;
+          report += `Saldo: ${bal}\n`;
+        }
+
+        await navigator.clipboard.writeText(report);
+        showAlert('Relatório copiado para a área de transferência!', 'success');
+      } catch {
+        showAlert('Erro ao gerar relatório', 'error');
+      }
+    });
+
+    function cancelEdit() {
+      form.reset();
+      editIndex.value = '';
+      formTitle.textContent = 'Nova Reunião';
+      submitBtn.textContent = 'Registrar';
+      cancelEditBtn.style.display = 'none';
+    }
+
+    function startEdit(index, name, start, end, card) {
+      editIndex.value = index;
+      nomeInput.value = name;
+      inicioInput.value = start;
+      fimInput.value = end;
+      cardInput.value = card || '';
+      formTitle.textContent = 'Editar Reunião';
+      submitBtn.textContent = 'Salvar';
+      cancelEditBtn.style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    meetingList.addEventListener('click', async (e) => {
+      const li = e.target.closest('.meeting-item');
+      if (!li) return;
+      const index = li.dataset.index;
+
+      if (e.target.classList.contains('btn-edit')) {
+        const name = li.querySelector('.meeting-name').textContent;
+        const timeText = li.querySelector('.meeting-time').textContent;
+        const [start, end] = timeText.split(' — ').map(s => s.trim());
+        const cardBadge = li.querySelector('.card-badge');
+        const card = cardBadge ? cardBadge.textContent : '';
+        startEdit(index, name, start, end, card);
+      }
+
+      if (e.target.classList.contains('btn-delete')) {
+        if (!confirm('Excluir esta reunião?')) return;
+        try {
+          const res = await fetch(`/reunioes/${index}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error();
+          showAlert('Reunião excluída', 'success');
+          if (editIndex.value === index) cancelEdit();
+          await refreshMeetings();
+        } catch {
+          showAlert('Erro ao excluir', 'error');
+        }
+      }
+    });
+
+    async function refreshMeetings() {
+      const res = await fetch('/reunioes');
+      const data = await res.json();
+
+      meetingList.innerHTML = '';
+
+      if (data.length > 1 || (data.length === 1 && !data[0].total)) {
+        meetingList.innerHTML = data
+          .filter(item => !item.total)
+          .map(m => `
+            <li class="meeting-item" data-index="${m.index}">
+              <div>
+                <div class="meeting-name">${m.name}</div>
+                <div class="meeting-time">${m.start} — ${m.end}</div>
+                ${m.card ? `<span class="card-badge">${m.card}</span>` : ''}
+              </div>
+              <div class="meeting-actions">
+                <span class="meeting-duration">${m.duration}</span>
+                <button class="btn-icon btn-edit" title="Editar">Editar</button>
+                <button class="btn-icon btn-delete" title="Excluir">Excluir</button>
+              </div>
+            </li>
+          `).join('');
+
+        const totalItem = data.find(item => item.total);
+        if (totalItem) {
+          totalRow.style.display = 'flex';
+          totalValue.textContent = totalItem.total;
+
+          balanceRow.style.display = 'flex';
+          const bm = totalItem.balance_minutes;
+          const absBm = Math.abs(bm);
+          const hours = Math.floor(absBm / 60);
+          const mins = absBm % 60;
+          let display = '';
+          if (hours > 0 && mins > 0) display = `${hours}h${mins}min`;
+          else if (hours > 0) display = `${hours}h`;
+          else display = `${mins}min`;
+
+          if (bm < 0) {
+            balanceValue.textContent = display + ' extra';
+            balanceValue.className = 'overtime';
+          } else if (bm === 0) {
+            balanceValue.textContent = 'Completo';
+            balanceValue.className = '';
+          } else {
+            balanceValue.textContent = 'Restam ' + display;
+            balanceValue.className = '';
+          }
+        }
+      } else {
+        meetingList.innerHTML = '<li class="empty-state">Nenhuma reunião registrada hoje</li>';
+        totalRow.style.display = 'none';
+        balanceRow.style.display = 'none';
+      }
+    }
+
+    function showAlert(msg, type) {
+      alertEl.className = `alert ${type}`;
+      alertEl.textContent = msg;
+      setTimeout(() => { alertEl.className = 'alert'; }, 4000);
+    }
+  </script>
+</body>
+</html>
