@@ -1,10 +1,9 @@
-import hashlib
 from datetime import datetime, timedelta
 
+import bcrypt
 import pytest
 
 from app.auth import (
-    _hash_password,
     _sessions,
     cleanup_expired_sessions,
     create_session,
@@ -21,35 +20,33 @@ def clear_sessions():
     _sessions.clear()
 
 
-class TestHashPassword:
-    def test_hash_is_deterministic(self):
-        assert _hash_password("test", "salt") == _hash_password("test", "salt")
-
-    def test_different_passwords_different_hashes(self):
-        assert _hash_password("a", "salt") != _hash_password("b", "salt")
-
-    def test_different_salts_different_hashes(self):
-        assert _hash_password("test", "salt1") != _hash_password("test", "salt2")
-
-
 class TestVerifyPassword:
-    def test_correct_password(self, monkeypatch):
-        salt = "my-salt"
-        hashed = hashlib.sha256(f"{salt}secret".encode()).hexdigest()
-        monkeypatch.setattr("app.config.settings.auth_password_hash", hashed)
-        monkeypatch.setattr("app.config.settings.auth_salt", salt)
+    def test_correct_password_bcrypt(self, monkeypatch):
+        h = bcrypt.hashpw(b"secret", bcrypt.gensalt(10)).decode()
+        monkeypatch.setattr("app.config.settings.auth_password_hash", h)
         assert verify_password("secret") is True
 
-    def test_wrong_password(self, monkeypatch):
-        salt = "my-salt"
-        hashed = hashlib.sha256(f"{salt}secret".encode()).hexdigest()
-        monkeypatch.setattr("app.config.settings.auth_password_hash", hashed)
-        monkeypatch.setattr("app.config.settings.auth_salt", salt)
+    def test_wrong_password_bcrypt(self, monkeypatch):
+        h = bcrypt.hashpw(b"secret", bcrypt.gensalt(10)).decode()
+        monkeypatch.setattr("app.config.settings.auth_password_hash", h)
         assert verify_password("wrong") is False
 
     def test_empty_hash_returns_false(self, monkeypatch):
         monkeypatch.setattr("app.config.settings.auth_password_hash", "")
         assert verify_password("anything") is False
+
+    def test_malformed_hash_returns_false(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.config.settings.auth_password_hash", "$2b$not-a-valid-hash"
+        )
+        assert verify_password("anything") is False
+
+    def test_non_bcrypt_hash_returns_false(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.config.settings.auth_password_hash",
+            "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+        )
+        assert verify_password("password") is False
 
 
 class TestSessions:

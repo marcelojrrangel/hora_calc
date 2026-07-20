@@ -53,6 +53,47 @@ class TestCalculator:
         assert "text/html" in response.headers["content-type"]
 
 
+class TestLoginRateLimit:
+    def test_failed_login_increments_attempt_counter(self, client):
+        for i in range(5):
+            response = client.post("/login", data={"password": "wrong"})
+            assert response.status_code == 401
+
+        # 6th attempt should be rate limited
+        response = client.post("/login", data={"password": "wrong"})
+        assert response.status_code == 429
+        assert response.headers["Retry-After"].isdigit()
+        assert int(response.headers["Retry-After"]) > 0
+
+    def test_successful_login_resets_rate_limiter(self, client):
+        for _ in range(4):
+            client.post("/login", data={"password": "wrong"})
+
+        response = client.post(
+            "/login",
+            data={"password": "test-password"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+
+        # After success, previous failed attempts should be cleared
+        response = client.post("/login", data={"password": "wrong"})
+        assert response.status_code == 401
+
+    def test_rate_limit_is_per_ip(self, client):
+        # Five failed attempts from one IP
+        for _ in range(5):
+            client.post("/login", data={"password": "wrong"})
+
+        # Same request but from a different simulated IP should succeed
+        response = client.post(
+            "/login",
+            data={"password": "wrong"},
+            headers={"X-Forwarded-For": "10.0.0.1"},
+        )
+        assert response.status_code == 401
+
+
 class TestSummary:
     def test_summary_empty(self, client):
         response = client.get("/resumo?data=2099-01-01")

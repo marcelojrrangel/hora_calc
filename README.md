@@ -57,8 +57,8 @@ Acesse `http://localhost:8000` no navegador.
 | `HORA_DATA_DIR` | Diretorio dos arquivos CSV | data |
 | `HORA_LOG_LEVEL` | Nivel de log (DEBUG, INFO, WARNING, ERROR) | INFO |
 | `HORA_ENVIRONMENT` | Ambiente (development, production) | development |
-| `HORA_AUTH_PASSWORD_HASH` | Hash SHA-256 da senha | (obrigatorio) |
-| `HORA_AUTH_SALT` | Salt para o hash da senha | (obrigatorio) |
+| `HORA_AUTH_PASSWORD_HASH` | Hash da senha (bcrypt) | (obrigatorio) |
+| `HORA_AUTH_BCRYPT_ROUNDS` | Custo do bcrypt para gerar novos hashes | 12 |
 
 ## Testes
 

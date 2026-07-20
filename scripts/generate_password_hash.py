@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-import hashlib
-import secrets
 import sys
 
+import bcrypt
 
-def generate_hash(password: str) -> tuple[str, str]:
-    salt = secrets.token_hex(16)
-    hashed = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
-    return hashed, salt
+
+def generate_hash(password: str, rounds: int = 12) -> str:
+    return bcrypt.hashpw(
+        password.encode("utf-8"), bcrypt.gensalt(rounds)
+    ).decode("utf-8")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python scripts/generate_password_hash.py <password>")
+        print("Usage: python scripts/generate_password_hash.py <password> [rounds]")
         sys.exit(1)
 
     password = sys.argv[1]
-    hashed, salt = generate_hash(password)
+    rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 12
+    hashed = generate_hash(password, rounds)
     print(f"HASH: {hashed}")
-    print(f"SALT: {salt}")
     print(f"\nAdd to your .env file:")
     print(f"HORA_AUTH_PASSWORD_HASH={hashed}")
-    print(f"HORA_AUTH_SALT={salt}")

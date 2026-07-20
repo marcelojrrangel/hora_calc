@@ -1,8 +1,8 @@
-import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
+import bcrypt
 from fastapi import Cookie, HTTPException, Request, Response
 from starlette.status import HTTP_401_UNAUTHORIZED
 
@@ -13,16 +13,20 @@ _sessions: dict[str, datetime] = {}
 SESSION_DURATION_HOURS = 24
 
 
-def _hash_password(password: str, salt: str) -> str:
-    return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
-
-
 def verify_password(password: str) -> bool:
-    if not settings.auth_password_hash:
+    stored = settings.auth_password_hash
+    if not stored:
         return False
-    salt = settings.auth_salt
-    hashed = _hash_password(password, salt)
-    return secrets.compare_digest(hashed, settings.auth_password_hash)
+
+    if not stored.startswith("$2"):
+        return False
+
+    try:
+        return bcrypt.checkpw(
+            password.encode("utf-8"), stored.encode("utf-8")
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def create_session() -> str:

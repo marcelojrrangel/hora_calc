@@ -14,6 +14,7 @@ from app.auth import (
     verify_password,
 )
 from app.config import settings
+from app.rate_limiter import login_rate_limiter
 from app.domain.exceptions import InvalidFilenameError, MeetingNotFoundError
 from app.use_cases.meeting_use_cases import MeetingUseCases
 
@@ -51,9 +52,20 @@ async def login_page(session_token: str | None = Cookie(None)):
 
 
 @router.post("/login")
-async def login(password: str = Form(...)):
+async def login(request: Request, password: str = Form(...)):
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    client_ip = client_ip.split(",")[0].strip() if client_ip else "unknown"
+    if login_rate_limiter.is_limited(client_ip):
+        retry_after = login_rate_limiter.retry_after(client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
     if not verify_password(password):
+        login_rate_limiter.record_attempt(client_ip)
         raise HTTPException(status_code=401, detail="Senha incorreta")
+    login_rate_limiter.reset(client_ip)
     token = create_session()
     response = RedirectResponse(url="/", status_code=302)
     set_session_cookie(response, token)
