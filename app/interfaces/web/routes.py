@@ -13,7 +13,7 @@ from app.auth import (
     validate_session,
     verify_password,
 )
-from app.config import settings
+from app.config import settings, today
 from app.rate_limiter import login_rate_limiter
 from app.domain.exceptions import InvalidFilenameError, MeetingNotFoundError
 from app.use_cases.meeting_use_cases import MeetingUseCases
@@ -86,10 +86,10 @@ async def index(request: Request, session_token: str | None = Cookie(None)):
     if not _check_auth(session_token):
         return RedirectResponse(url="/login", status_code=302)
     uc = _get_use_cases(request)
-    today = date.today()
-    meetings = uc.get_meetings_by_date(today)
-    total = uc.get_total_hours(today)
-    balance = uc.get_balance(today)
+    today_date = today()
+    meetings = uc.get_meetings_by_date(today_date)
+    total = uc.get_total_hours(today_date)
+    balance = uc.get_balance(today_date)
     balance_text = _format_minutes(abs(balance["balance_minutes"]))
     template = _env.get_template("index.html")
     html = template.render(
@@ -97,7 +97,7 @@ async def index(request: Request, session_token: str | None = Cookie(None)):
         total=total,
         balance=balance,
         balance_text=balance_text,
-        today=today.strftime("%d/%m/%Y"),
+        today=today_date.strftime("%d/%m/%Y"),
     )
     return HTMLResponse(html)
 
@@ -134,7 +134,7 @@ async def get_meetings(
     if not _check_auth(session_token):
         raise HTTPException(status_code=401, detail="Not authenticated")
     uc = _get_use_cases(request)
-    meeting_date = date.fromisoformat(data) if data else date.today()
+    meeting_date = date.fromisoformat(data) if data else today()
     items = uc.get_meetings_with_index(meeting_date)
     total = uc.get_total_hours(meeting_date)
     balance = uc.get_balance(meeting_date)
@@ -170,7 +170,7 @@ async def update_meeting(
         end_time = time.fromisoformat(fim)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid time format")
-    meeting_date = date.fromisoformat(data) if data else date.today()
+    meeting_date = date.fromisoformat(data) if data else today()
     meeting = uc.update_meeting(
         meeting_date, index, nome, start_time, end_time, card=card.strip() or None
     )
@@ -187,7 +187,7 @@ async def delete_meeting(
     if not _check_auth(session_token):
         raise HTTPException(status_code=401, detail="Not authenticated")
     uc = _get_use_cases(request)
-    meeting_date = date.fromisoformat(data) if data else date.today()
+    meeting_date = date.fromisoformat(data) if data else today()
     if not uc.delete_meeting(meeting_date, index):
         raise MeetingNotFoundError("Meeting not found")
     return {"success": True}
@@ -211,7 +211,7 @@ async def summary(
     if not _check_auth(session_token):
         raise HTTPException(status_code=401, detail="Not authenticated")
     uc = _get_use_cases(request)
-    meeting_date = date.fromisoformat(data) if data else date.today()
+    meeting_date = date.fromisoformat(data) if data else today()
     meetings = uc.get_meetings_by_date(meeting_date)
     total = uc.get_total_hours(meeting_date)
     total_dec = uc.get_total_decimal(meeting_date)
@@ -228,8 +228,8 @@ async def remaining(request: Request, session_token: str | None = Cookie(None)):
     if not _check_auth(session_token):
         raise HTTPException(status_code=401, detail="Not authenticated")
     uc = _get_use_cases(request)
-    today = date.today()
-    meetings = uc.get_meetings_by_date(today)
+    today_date = today()
+    meetings = uc.get_meetings_by_date(today_date)
     total_minutes = sum(m.duration_minutes for m in meetings)
     remaining_minutes = max(0, settings.daily_target_minutes - total_minutes)
     hours = remaining_minutes // 60

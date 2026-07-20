@@ -17,3 +17,5 @@ services:
         value: INFO
       - key: HORA_DAILY_TARGET_MINUTES
         value: "480"
+      - key: HORA_TIMEZONE
+        value: "America/Sao_Paulo"

@@ -1,7 +1,7 @@
 import logging
 from datetime import date, time
 
-from app.config import settings
+from app.config import settings, today
 from app.domain.exceptions import InvalidMeetingDurationError, MeetingNotFoundError
 from app.domain.models import Meeting
 from app.domain.repositories import MeetingRepository
@@ -37,7 +37,7 @@ class MeetingUseCases:
         return meeting
 
     def get_today_meetings(self) -> list[Meeting]:
-        return self._repository.find_by_date(date.today())
+        return self._repository.find_by_date(today())
 
     def get_meetings_by_date(self, meeting_date: date) -> list[Meeting]:
         return self._repository.find_by_date(meeting_date)

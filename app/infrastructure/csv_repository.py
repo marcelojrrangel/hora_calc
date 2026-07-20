@@ -2,6 +2,7 @@ import re
 from datetime import date, time
 from pathlib import Path
 
+from app.config import today
 from app.domain.models import Meeting
 from app.domain.repositories import MeetingRepository
 
@@ -50,7 +51,7 @@ class CsvMeetingRepository(MeetingRepository):
         return header.startswith("ID;")
 
     def save(self, meeting: Meeting) -> None:
-        meeting_date = meeting.date or date.today()
+        meeting_date = meeting.date or today()
         file_path = self._file_path(meeting_date)
         header_needed = not file_path.exists()
 

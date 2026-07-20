@@ -1,3 +1,6 @@
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +17,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     auth_password_hash: str = ""
     auth_bcrypt_rounds: int = 12
+    timezone: str = "America/Sao_Paulo"
 
 
 settings = Settings()
+
+
+def today() -> date:
+    return datetime.now(ZoneInfo(settings.timezone)).date()
